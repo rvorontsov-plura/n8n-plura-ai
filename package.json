@@ -1,0 +1,59 @@
+{
+  "name": "n8n-nodes-plura-ai",
+  "version": "0.1.0",
+  "description": "n8n community node for Plura.ai Automations - trigger workflows and manage leads via Plura.ai",
+  "license": "MIT",
+  "author": {
+    "name": "Plura.ai",
+    "url": "https://plura.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/plura-ai/n8n-plura-ai.git"
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "plura",
+    "plura.ai",
+    "automation",
+    "crm",
+    "lead-management",
+    "workflow"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:watch": "tsc -p tsconfig.json -w",
+    "lint": "eslint . --ext .ts",
+    "dev": "n8n-node dev"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/PluraAiAutomationsApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/PluraAiAutomations/PluraAiAutomations.node.js",
+      "dist/nodes/PluraAiAutomationsTrigger/PluraAiAutomationsTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "^0.3.0",
+    "@types/node": "^20.10.0",
+    "eslint": "^9.0.0",
+    "n8n-core": "^1.122.7",
+    "n8n-workflow": "^1.120.4",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "n8n-core": "*",
+    "n8n-workflow": "*"
+  }
+}

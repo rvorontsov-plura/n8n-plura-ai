@@ -1,0 +1,23 @@
+# Source files (only dist/ is needed)
+src/
+nodes/
+credentials/
+*.ts
+!*.d.ts
+
+# Development files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+.vscode/
+.github/
+
+# Build artifacts (keep dist/)
+*.log
+.DS_Store
+node_modules/
+
+# Documentation (README.md is included by default)
+CHANGELOG.md
+# LICENSE is included via package.json "files" array
+
