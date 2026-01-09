@@ -1,7 +1,10 @@
 import type {
+	ICredentialTestFunctions,
+	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
+	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -16,6 +19,7 @@ import {
 	getPluraCreds,
 	parseOptionalJson,
 	requestJson,
+	searchLeadViaWorkspace,
 } from '../common/PluraHelpers';
 
 type Lead = Record<string, any> & { lead_id?: string };
@@ -41,7 +45,11 @@ async function pluraApiRequest<T>(
 	});
 }
 
-async function findLeadByPhone(ctx: IExecuteFunctions, phone: string): Promise<Lead | null> {
+async function findLeadByPhone(
+	ctx: IExecuteFunctions,
+	phone: string,
+	record?: Record<string, unknown>,
+): Promise<Lead | null> {
 	const variants = getPhoneVariants(phone);
 	const lookups = variants.map(async (variant) => {
 		try {
@@ -52,7 +60,15 @@ async function findLeadByPhone(ctx: IExecuteFunctions, phone: string): Promise<L
 		}
 	});
 	const results = await Promise.all(lookups);
-	return results.find((r) => r && r.lead_id) || null;
+	const found = results.find((r) => r && r.lead_id) || null;
+	if (found) return found;
+
+	try {
+		const fallback = await searchLeadViaWorkspace(ctx, phone, record);
+		if (fallback && fallback.lead_id) return fallback as Lead;
+	} catch {}
+
+	return null;
 }
 
 async function updateLeadById(
@@ -87,10 +103,10 @@ export class PluraAiAutomations implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Plura.ai Automations',
 		name: 'pluraAiAutomations',
-		icon: 'file:plura.svg',
+		icon: 'file:plura.png',
 		group: ['transform'],
 		version: 1,
-		description: 'Plura.ai Automations actions (lead + call)',
+		description: 'Plura.ai helps teams build, deploy, and manage AI agents for calls, chat, and workflows. Use Plura.ai to automate outreach, route conversations, and sync data across your tools.',
 		defaults: {
 			name: 'Plura.ai Automations',
 		},
@@ -294,6 +310,54 @@ export class PluraAiAutomations implements INodeType {
 	};
 
 	methods = {
+		credentialTest: {
+			async pluraAiAutomationsApiTest(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const { email, password } = credential.data as { email?: string; password?: string };
+				
+				if (!email || !password) {
+					return {
+						status: 'Error',
+						message: 'Email and Password are required',
+					};
+				}
+
+				try {
+					const response = await this.helpers.request({
+						method: 'POST',
+						url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({
+							user: email,
+							password: password,
+						}),
+						json: true,
+					});
+
+					if (response && response.status === 'success' && response.token) {
+						return {
+							status: 'OK',
+							message: 'Connection successful!',
+						};
+					}
+
+					return {
+						status: 'Error',
+						message: response?.message || 'Authentication failed. Please check your email and password.',
+					};
+				} catch (error: any) {
+					const message = error?.message || 'Connection failed';
+					return {
+						status: 'Error',
+						message: `Authentication failed: ${message}`,
+					};
+				}
+			},
+		},
 		loadOptions: {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
@@ -302,11 +366,7 @@ export class PluraAiAutomations implements INodeType {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-					},
+					body: { user: creds.email, password: creds.password },
 				});
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
@@ -319,12 +379,7 @@ export class PluraAiAutomations implements INodeType {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-						workspace_id: workspaceId,
-					},
+					body: { user: creds.email, password: creds.password, workspace_id: workspaceId },
 				});
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
@@ -332,18 +387,12 @@ export class PluraAiAutomations implements INodeType {
 			async getAgents(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl(creds);
-
 				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/agents`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-					},
+					body: { user: creds.email, password: creds.password },
 				});
-
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
 		},
@@ -455,9 +504,8 @@ export class PluraAiAutomations implements INodeType {
 					const custom = parseOptionalJson(this, customFieldsJson, 'Invalid JSON in Custom Fields');
 					if (custom) Object.assign(record, custom);
 
-					// Optimistic: if a lead already exists for this phone, update then enroll by lead_id
 					try {
-						const existing = await findLeadByPhone(this, phone);
+						const existing = await findLeadByPhone(this, phone, record);
 						if (existing?.lead_id) {
 							const hasUpdatableFields = Object.keys(record).some(
 								(k) => k !== 'phone' && record[k] !== undefined && record[k] !== null && record[k] !== '',
@@ -469,11 +517,8 @@ export class PluraAiAutomations implements INodeType {
 							returnData.push({ json: enrolled });
 							continue;
 						}
-					} catch {
-						// ignore pre-check failures and proceed to create path
-					}
+					} catch {}
 
-					// Create (record) and enroll
 					try {
 						const res = await pluraApiRequest<Record<string, unknown>>(this, 'POST', '/lead/sendtoworkflow', {
 							body: { workflow_id: workflowId, record },
@@ -483,18 +528,15 @@ export class PluraAiAutomations implements INodeType {
 					} catch (err: any) {
 						const message = err?.message ? String(err.message) : 'sendtoworkflow failed';
 
-						// Duplicate/lead exists fallback: find by phone, update, then enroll by lead_id
 						try {
-							const existing = await findLeadByPhone(this, phone);
+							const existing = await findLeadByPhone(this, phone, record);
 							if (existing?.lead_id) {
 								await updateLeadById(this, existing.lead_id, record);
 						const enrolled = await enrollLeadWithId(this, workflowId, existing.lead_id);
 						returnData.push({ json: enrolled });
 								continue;
 							}
-						} catch {
-							// ignore and throw original
-						}
+						} catch {}
 
 						throw new NodeOperationError(this.getNode(), message);
 					}
@@ -510,9 +552,12 @@ export class PluraAiAutomations implements INodeType {
 				}
 
 				const agent = this.getNodeParameter('agent', i) as string;
-				const toPhone = this.getNodeParameter('call_to_phone', i) as string;
-				const fromPhone = this.getNodeParameter('call_from_phone', i) as string;
+				const toPhoneRaw = this.getNodeParameter('call_to_phone', i) as string;
+				const fromPhoneRaw = this.getNodeParameter('call_from_phone', i) as string;
 				const requestDataJson = this.getNodeParameter('request_data_json', i) as string;
+
+				const toPhone = toPhoneRaw.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+				const fromPhone = fromPhoneRaw.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
 
 				const requestData = parseOptionalJson(this, requestDataJson, 'Invalid JSON in Request Data');
 

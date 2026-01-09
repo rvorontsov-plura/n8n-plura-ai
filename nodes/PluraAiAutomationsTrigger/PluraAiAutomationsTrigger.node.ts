@@ -20,10 +20,10 @@ export class PluraAiAutomationsTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Plura.ai Automations Trigger',
 		name: 'pluraAiAutomationsTrigger',
-		icon: 'file:plura.svg',
+		icon: 'file:plura.png',
 		group: ['trigger'],
 		version: 1,
-		description: 'Triggers when a selected Plura.ai automation node is executed.',
+		description: 'Triggers when a Plura.ai automation node is executed. Plura.ai helps teams build, deploy, and manage AI agents for calls, chat, and workflows.',
 		defaults: {
 			name: 'Plura.ai Automations Trigger',
 		},
@@ -86,11 +86,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-					},
+					body: { user: creds.email, password: creds.password },
 				});
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
@@ -103,12 +99,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-						workspace_id: workspaceId,
-					},
+					body: { user: creds.email, password: creds.password, workspace_id: workspaceId },
 				});
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
@@ -121,12 +112,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/nodes`,
 					headers: { 'Content-Type': 'application/json' },
-					body: {
-						user: creds.email,
-						password: creds.password,
-						api_key: creds.apiKey,
-						journey_id: journeyId,
-					},
+					body: { user: creds.email, password: creds.password, journey_id: journeyId },
 				});
 				return (resp.items || []).map((i) => ({ name: i.label, value: i.value }));
 			},
@@ -136,21 +122,18 @@ export class PluraAiAutomationsTrigger implements INodeType {
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
-				// We don't have a query endpoint to verify; rely on n8n activation state.
 				return false;
 			},
 
 			async create(this: IHookFunctions) {
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl(creds);
-
 				const journeyId = this.getNodeParameter('journey_id') as string;
 				const automationNodeId = this.getNodeParameter('automation_node_id') as string;
-
 				const webhookUrl = this.getNodeWebhookUrl('default');
 
 				if (!webhookUrl) {
-					throw new NodeOperationError(this.getNode(), 'Failed to determine webhook URL for this trigger');
+					throw new NodeOperationError(this.getNode(), 'Failed to determine webhook URL');
 				}
 
 				const resp = await requestJson<{ hook_id?: string }>(this, {
@@ -165,7 +148,6 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					},
 				});
 
-				// Store minimal info for delete (even though delete uses URL).
 				const staticData = this.getWorkflowStaticData('node');
 				staticData.pluraWebhookUrl = webhookUrl;
 				staticData.pluraHookId = resp?.hook_id;

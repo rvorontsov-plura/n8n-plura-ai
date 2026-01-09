@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-plura-ai",
   "version": "0.1.0",
-  "description": "n8n community node for Plura.ai Automations - trigger workflows and manage leads via Plura.ai",
+  "description": "Plura.ai helps teams build, deploy, and manage AI agents for calls, chat, and workflows. Use Plura.ai to automate outreach, route conversations, and sync data across your tools.",
   "license": "MIT",
   "author": {
     "name": "Plura.ai",

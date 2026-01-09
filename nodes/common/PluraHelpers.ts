@@ -64,27 +64,16 @@ export async function requestJson<T = unknown>(
 		});
 		return resp as T;
 	} catch (error) {
-		// Preserve n8n's rich request error details (statusCode, body, etc.)
 		throw new NodeApiError(ctx.getNode(), error as any);
 	}
 }
 
-/**
- * Get API key for Plura API calls.
- * Priority: Direct API key > Bearer token (for workspace API key lookup) > Email/Password login
- */
 export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 	const creds = await getPluraCreds(ctx);
 
-	// 1) If API key is provided directly, use it
-	if (creds.apiKey && creds.authMethod === 'apiKey') {
-		return creds.apiKey;
-	}
+	if (creds.apiKey) return creds.apiKey;
 
-	// 2) If bearer token is available (from login), use it to fetch workspace API key
 	let jwt = creds.bearerToken;
-
-	// 3) If no bearer token but email/password provided, authenticate to get JWT
 	if (!jwt && creds.email && creds.password) {
 		const auth = await requestJson<{ status?: string; token?: string }>(ctx, {
 			method: 'POST',
@@ -92,7 +81,6 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 			headers: { 'Content-Type': 'application/json' },
 			body: { user: creds.email, password: creds.password },
 		});
-
 		jwt = auth?.token;
 		if (!jwt) {
 			throw new NodeOperationError(ctx.getNode(), 'Plura authentication failed: missing token');
@@ -100,13 +88,9 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 	}
 
 	if (!jwt) {
-		throw new NodeOperationError(
-			ctx.getNode(),
-			'Missing credentials. Provide an API Key, or Email + Password to login and get a bearer token.',
-		);
+		throw new NodeOperationError(ctx.getNode(), 'Missing credentials. Provide an API Key, or Email + Password.');
 	}
 
-	// 4) Get first workspace
 	const workspaces = await requestJson<Array<{ workspace_id: string }>>(ctx, {
 		method: 'GET',
 		url: 'https://plura-lb.gynetix.com/backend/api/user/Workspaces.json',
@@ -118,7 +102,6 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 		throw new NodeOperationError(ctx.getNode(), 'No workspaces available for this account');
 	}
 
-	// 5) Get API key for workspace
 	const apiKeyResp = await requestJson<{ items?: Array<{ api_key?: string }> }>(ctx, {
 		method: 'GET',
 		url: 'https://plura-lb.gynetix.com/backend/api/user/ApiKey.json',
@@ -126,8 +109,7 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 		headers: { accept: '*/*', Authorization: `Bearer ${jwt}` },
 	});
 
-	const apiKey =
-		apiKeyResp?.items && apiKeyResp.items.length ? String(apiKeyResp.items[0].api_key || '').trim() : '';
+	const apiKey = apiKeyResp?.items?.[0]?.api_key?.trim() || '';
 	if (!apiKey) {
 		throw new NodeOperationError(ctx.getNode(), 'No API key found for the first workspace');
 	}
@@ -135,24 +117,13 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 	return apiKey;
 }
 
-/**
- * Get JWT bearer token for Plura backend API calls (workspaces, journeys, flows, etc.)
- * Uses stored bearer token if available, otherwise authenticates with email/password
- */
 export async function getBearerTokenOrThrow(ctx: N8nCtx): Promise<string> {
 	const creds = await getPluraCreds(ctx);
 
-	// If bearer token is already stored, use it
-	if (creds.bearerToken) {
-		return creds.bearerToken;
-	}
+	if (creds.bearerToken) return creds.bearerToken;
 
-	// Otherwise, authenticate with email/password
 	if (!creds.email || !creds.password) {
-		throw new NodeOperationError(
-			ctx.getNode(),
-			'Missing credentials. Provide Email + Password to login, or set a Bearer Token directly.',
-		);
+		throw new NodeOperationError(ctx.getNode(), 'Missing credentials. Provide Email + Password.');
 	}
 
 	const auth = await requestJson<{ status?: string; token?: string }>(ctx, {
@@ -200,4 +171,109 @@ export function getPhoneVariants(phone: string): string[] {
 	if (!variants.includes(noPlus)) variants.push(noPlus);
 	if (!variants.includes(noSpecial)) variants.push(noSpecial);
 	return variants.filter((v, i, self) => v && self.indexOf(v) === i);
+}
+
+function leadsMatch(
+	lead: Record<string, unknown>,
+	record: Record<string, unknown>,
+): boolean {
+	const leadPhone = normalizePhone(String(lead.phone || ''));
+	const recordPhone = normalizePhone(String(record.phone || ''));
+	if (leadPhone && recordPhone && leadPhone === recordPhone) {
+		return true;
+	}
+
+	if (
+		lead.email &&
+		record.email &&
+		String(lead.email).toLowerCase().trim() === String(record.email).toLowerCase().trim()
+	) {
+		return true;
+	}
+
+	if (
+		lead.first_name &&
+		record.first_name &&
+		lead.last_name &&
+		record.last_name &&
+		String(lead.first_name).toLowerCase().trim() === String(record.first_name).toLowerCase().trim() &&
+		String(lead.last_name).toLowerCase().trim() === String(record.last_name).toLowerCase().trim()
+	) {
+		return true;
+	}
+
+	return false;
+}
+
+export async function getFirstWorkspaceId(ctx: N8nCtx, jwt: string): Promise<string | null> {
+	try {
+		const workspaces = await requestJson<Array<{ workspace_id: string }>>(ctx, {
+			method: 'GET',
+			url: 'https://plura-lb.gynetix.com/backend/api/user/Workspaces.json',
+			headers: { accept: '*/*', Authorization: `Bearer ${jwt}` },
+		});
+
+		if (Array.isArray(workspaces) && workspaces.length > 0) {
+			return workspaces[0].workspace_id;
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+export async function searchLeadViaWorkspace(
+	ctx: N8nCtx,
+	phone: string,
+	record?: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+	const creds = await getPluraCreds(ctx);
+
+	if (!creds.email || !creds.password) {
+		return null;
+	}
+
+	let jwt: string;
+	try {
+		jwt = await getBearerTokenOrThrow(ctx);
+	} catch {
+		return null;
+	}
+
+	const workspaceId = await getFirstWorkspaceId(ctx, jwt);
+	if (!workspaceId) {
+		return null;
+	}
+
+	const variants = getPhoneVariants(phone);
+
+	const fetchWorkspaceLeads = async (params: Record<string, unknown> = {}): Promise<Array<Record<string, unknown>>> => {
+		try {
+			const resp = await requestJson<{ status?: string; items?: Array<Record<string, unknown>> }>(ctx, {
+				method: 'GET',
+				url: 'https://plura-lb.gynetix.com/backend/api/user/WorkspaceInboxSearch.json',
+				qs: {
+					workspace_id: workspaceId,
+					tag_matching: 'AND',
+					responders_only: false,
+					limit: 50,
+					page: 1,
+					...params,
+				} as Record<string, string | number | boolean | undefined>,
+				headers: { accept: '*/*', Authorization: `Bearer ${jwt}` },
+			});
+			return resp?.status === 'success' && Array.isArray(resp.items) ? resp.items : [];
+		} catch {
+			return [];
+		}
+	};
+
+	for (const variant of variants) {
+		const items = await fetchWorkspaceLeads({ phone: variant, limit: 1 });
+		if (items.length > 0 && items[0].lead_id) return items[0];
+	}
+
+	const items = await fetchWorkspaceLeads({ page: 1, limit: 50 });
+	const match = items.find((lead) => leadsMatch(lead, { phone, ...(record || {}) }));
+	return match?.lead_id ? match : null;
 }
