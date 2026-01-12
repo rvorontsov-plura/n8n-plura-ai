@@ -66,7 +66,9 @@ async function findLeadByPhone(
 	try {
 		const fallback = await searchLeadViaWorkspace(ctx, phone, record);
 		if (fallback && fallback.lead_id) return fallback as Lead;
-	} catch {}
+	} catch {
+		// Ignore workspace search failures
+	}
 
 	return null;
 }
@@ -516,8 +518,10 @@ export class PluraAiAutomations implements INodeType {
 							const enrolled = await enrollLeadWithId(this, workflowId, existing.lead_id);
 							returnData.push({ json: enrolled });
 							continue;
+							}
+						} catch {
+							// Ignore and throw original
 						}
-					} catch {}
 
 					try {
 						const res = await pluraApiRequest<Record<string, unknown>>(this, 'POST', '/lead/sendtoworkflow', {
@@ -536,7 +540,9 @@ export class PluraAiAutomations implements INodeType {
 						returnData.push({ json: enrolled });
 								continue;
 							}
-						} catch {}
+						} catch {
+							// Ignore and throw original
+						}
 
 						throw new NodeOperationError(this.getNode(), message);
 					}
