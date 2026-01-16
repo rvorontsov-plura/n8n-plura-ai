@@ -180,10 +180,12 @@ export class PluraAiAutomationsTrigger implements INodeType {
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
-		const body = this.getBodyData() as Record<string, unknown>;
+		const body = this.getBodyData() as Record<string, string | number | boolean | null | undefined>;
+		const accountIdValue = typeof body.accountId !== 'undefined' ? body.accountId : null;
+		const accountIdFallback = typeof body.account_id !== 'undefined' ? body.account_id : null;
 		const normalized = {
 			...body,
-			accountId: (body as any)?.accountId || (body as any)?.account_id || null,
+			accountId: accountIdValue || accountIdFallback || null,
 		};
 
 		return {

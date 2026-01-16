@@ -22,13 +22,13 @@ import {
 	searchLeadViaWorkspace,
 } from '../common/PluraHelpers';
 
-type Lead = Record<string, any> & { lead_id?: string };
+type Lead = Record<string, string | number | boolean | null | undefined> & { lead_id?: string };
 
 async function pluraApiRequest<T>(
 	ctx: IExecuteFunctions | ILoadOptionsFunctions,
 	method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
 	path: string,
-	opts: { qs?: Record<string, any>; body?: any } = {},
+	opts: { qs?: Record<string, string | number | boolean | undefined>; body?: Record<string, unknown> | unknown[] | string } = {},
 ): Promise<T> {
 	const creds = await getPluraCreds(ctx);
 	const apiKey = await getApiKeyOrThrow(ctx);
@@ -317,17 +317,66 @@ export class PluraAiAutomations implements INodeType {
 				this: ICredentialTestFunctions,
 				credential: ICredentialsDecrypted,
 			): Promise<INodeCredentialTestResult> {
-				const { email, password } = credential.data as { email?: string; password?: string };
-				
+				const { email, password, apiKey } = credential.data as {
+					email?: string;
+					password?: string;
+					apiKey?: string;
+				};
+
+				// If API key is provided, test with API key
+				if (apiKey && apiKey.trim()) {
+					try {
+						// ICredentialTestFunctions doesn't have httpRequest in types, but it exists at runtime
+						const helpers = this.helpers as unknown as {
+							httpRequest: (options: {
+								method: string;
+								url: string;
+								headers?: Record<string, string>;
+								json?: boolean;
+							}) => Promise<unknown>;
+						};
+						// Test API key by making a simple API call
+						await helpers.httpRequest({
+							method: 'GET',
+							url: 'https://api.plura.ai/v1/lead/get',
+							headers: {
+								Authorization: `Bearer ${apiKey.trim()}`,
+							},
+							json: true,
+						});
+						return {
+							status: 'OK',
+							message: 'Connection successful!',
+						};
+					} catch (error: unknown) {
+						const message = error instanceof Error ? error.message : 'Connection failed';
+						return {
+							status: 'Error',
+							message: `API Key authentication failed: ${message}`,
+						};
+					}
+				}
+
+				// Otherwise, test with email/password
 				if (!email || !password) {
 					return {
 						status: 'Error',
-						message: 'Email and Password are required',
+						message: 'Either API Key or Email and Password are required',
 					};
 				}
 
 				try {
-					const response = await this.helpers.request({
+					// ICredentialTestFunctions doesn't have httpRequest in types, but it exists at runtime
+					const helpers = this.helpers as unknown as {
+						httpRequest: (options: {
+							method: string;
+							url: string;
+							headers?: Record<string, string>;
+							body?: string;
+							json?: boolean;
+						}) => Promise<{ status?: string; token?: string; message?: string }>;
+					};
+					const response = await helpers.httpRequest({
 						method: 'POST',
 						url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
 						headers: {
@@ -351,8 +400,8 @@ export class PluraAiAutomations implements INodeType {
 						status: 'Error',
 						message: response?.message || 'Authentication failed. Please check your email and password.',
 					};
-				} catch (error: any) {
-					const message = error?.message || 'Connection failed';
+				} catch (error: unknown) {
+					const message = error instanceof Error ? error.message : 'Connection failed';
 					return {
 						status: 'Error',
 						message: `Authentication failed: ${message}`,
@@ -414,9 +463,15 @@ export class PluraAiAutomations implements INodeType {
 					const phone = this.getNodeParameter('lookup_phone', i) as string;
 					try {
 						const res = await pluraApiRequest<Lead>(this, 'GET', '/lead/get', { qs: { phone } });
-						returnData.push({ json: res || {} });
-					} catch (err: any) {
-						const statusCode = err?.httpCode ?? err?.statusCode;
+						returnData.push({ json: (res || {}) as IDataObject });
+					} catch (err: unknown) {
+						const statusCode =
+							(err && typeof err === 'object' && 'httpCode' in err
+								? (err as { httpCode?: number }).httpCode
+								: undefined) ??
+							(err && typeof err === 'object' && 'statusCode' in err
+								? (err as { statusCode?: number }).statusCode
+								: undefined);
 						if (Number(statusCode) === 404) {
 							returnData.push({ json: {} });
 						} else {
@@ -430,9 +485,15 @@ export class PluraAiAutomations implements INodeType {
 					const leadId = this.getNodeParameter('lead_id', i) as string;
 					try {
 						const res = await pluraApiRequest<Lead>(this, 'GET', '/lead/get', { qs: { lead_id: leadId } });
-						returnData.push({ json: res || {} });
-					} catch (err: any) {
-						const statusCode = err?.httpCode ?? err?.statusCode;
+						returnData.push({ json: (res || {}) as IDataObject });
+					} catch (err: unknown) {
+						const statusCode =
+							(err && typeof err === 'object' && 'httpCode' in err
+								? (err as { httpCode?: number }).httpCode
+								: undefined) ??
+							(err && typeof err === 'object' && 'statusCode' in err
+								? (err as { statusCode?: number }).statusCode
+								: undefined);
 						if (Number(statusCode) === 404) {
 							returnData.push({ json: {} });
 						} else {
@@ -529,8 +590,8 @@ export class PluraAiAutomations implements INodeType {
 						});
 						returnData.push({ json: (res || { success: true }) as IDataObject });
 						continue;
-					} catch (err: any) {
-						const message = err?.message ? String(err.message) : 'sendtoworkflow failed';
+					} catch (err: unknown) {
+						const message = err instanceof Error ? err.message : 'sendtoworkflow failed';
 
 						try {
 							const existing = await findLeadByPhone(this, phone, record);

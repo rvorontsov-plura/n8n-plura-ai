@@ -1,15 +1,16 @@
 {
   "name": "n8n-nodes-plura-ai",
-  "version": "1.0.1",
+  "version": "1.0.18",
   "description": "Plura.ai helps teams build, deploy, and manage AI agents for calls, chat, and workflows. Use Plura.ai to automate outreach, route conversations, and sync data across your tools.",
   "license": "MIT",
   "author": {
     "name": "Plura.ai",
+    "email": "roman@plura.ai",
     "url": "https://plura.ai"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/plura-ai/n8n-plura-ai.git"
+    "url": "git+https://github.com/rvorontsov-plura/n8n-plura-ai.git"
   },
   "keywords": [
     "n8n-community-node-package",
@@ -21,7 +22,6 @@
     "lead-management",
     "workflow"
   ],
-  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

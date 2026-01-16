@@ -54,17 +54,28 @@ export async function requestJson<T = unknown>(
 	},
 ): Promise<T> {
 	try {
-		const resp = await ctx.helpers.request({
+		const resp = await ctx.helpers.httpRequest({
 			method: options.method,
 			url: options.url,
 			qs: options.qs,
-			body: options.body,
+			body: options.body as
+				| string
+				| Buffer
+				| Record<string, unknown>
+				| unknown[]
+				| URLSearchParams
+				| undefined,
 			headers: options.headers,
 			json: true,
 		});
 		return resp as T;
 	} catch (error) {
-		throw new NodeApiError(ctx.getNode(), error as any);
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		const errorOptions =
+			error && typeof error === 'object' && 'httpCode' in error
+				? { httpCode: (error as { httpCode?: number }).httpCode }
+				: undefined;
+		throw new NodeApiError(ctx.getNode(), { message: errorMessage, ...errorOptions });
 	}
 }
 
