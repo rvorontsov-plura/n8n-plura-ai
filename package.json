@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-plura-ai",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "Plura.ai helps teams build, deploy, and manage AI agents for calls, chat, and workflows. Use Plura.ai to automate outreach, route conversations, and sync data across your tools.",
   "license": "MIT",
   "author": {

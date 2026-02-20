@@ -9,38 +9,26 @@ import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 export type N8nCtx = IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions | IWebhookFunctions;
 
 export type PluraCreds = {
-	authMethod?: 'login' | 'apiKey';
 	apiKey?: string;
 	email?: string;
 	password?: string;
-	bearerToken?: string; // JWT token from login
-	integrationsBaseUrl?: string;
-	pluraApiBaseUrl?: string;
 };
-
-export function stripTrailingSlash(url: string): string {
-	return url.replace(/\/+$/, '');
-}
 
 export async function getPluraCreds(ctx: N8nCtx): Promise<PluraCreds> {
 	const raw = (await ctx.getCredentials('pluraAiAutomationsApi')) as Record<string, unknown>;
 	return {
-		authMethod: (raw.authMethod as 'login' | 'apiKey') || 'login',
 		apiKey: String(raw.apiKey || '').trim() || undefined,
 		email: String(raw.email || '').trim() || undefined,
 		password: String(raw.password || '').trim() || undefined,
-		bearerToken: String(raw.bearerToken || '').trim() || undefined,
-		integrationsBaseUrl: String(raw.integrationsBaseUrl || '').trim() || undefined,
-		pluraApiBaseUrl: String(raw.pluraApiBaseUrl || '').trim() || undefined,
 	};
 }
 
-export function getIntegrationsBaseUrl(creds: PluraCreds): string {
-	return stripTrailingSlash(creds.integrationsBaseUrl || 'https://integrations.plura.ai/api');
+export function getIntegrationsBaseUrl(): string {
+	return 'https://integrations.plura.ai/api';
 }
 
-export function getPluraApiBaseUrl(creds: PluraCreds): string {
-	return stripTrailingSlash(creds.pluraApiBaseUrl || 'https://api.plura.ai/v1');
+export function getPluraApiBaseUrl(): string {
+	return 'https://api.plura.ai/v1';
 }
 
 export async function requestJson<T = unknown>(
@@ -84,8 +72,8 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 
 	if (creds.apiKey) return creds.apiKey;
 
-	let jwt = creds.bearerToken;
-	if (!jwt && creds.email && creds.password) {
+	let jwt: string | undefined;
+	if (creds.email && creds.password) {
 		const auth = await requestJson<{ status?: string; token?: string }>(ctx, {
 			method: 'POST',
 			url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
@@ -130,8 +118,6 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 
 export async function getBearerTokenOrThrow(ctx: N8nCtx): Promise<string> {
 	const creds = await getPluraCreds(ctx);
-
-	if (creds.bearerToken) return creds.bearerToken;
 
 	if (!creds.email || !creds.password) {
 		throw new NodeOperationError(ctx.getNode(), 'Missing credentials. Provide Email + Password.');

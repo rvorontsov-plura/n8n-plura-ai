@@ -81,7 +81,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 		loadOptions: {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
@@ -94,7 +94,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 			async getJourneys(this: ILoadOptionsFunctions) {
 				const workspaceId = this.getCurrentNodeParameter('workspace_id') as string;
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
@@ -107,7 +107,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 			async getAutomationNodes(this: ILoadOptionsFunctions) {
 				const journeyId = this.getCurrentNodeParameter('journey_id') as string;
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/nodes`,
@@ -126,8 +126,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 			},
 
 			async create(this: IHookFunctions) {
-				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const journeyId = this.getNodeParameter('journey_id') as string;
 				const automationNodeId = this.getNodeParameter('automation_node_id') as string;
 				const webhookUrl = this.getNodeWebhookUrl('default');
@@ -156,8 +155,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 			},
 
 			async delete(this: IHookFunctions) {
-				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 
 				const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
 				const storedWebhookUrl = typeof staticData.pluraWebhookUrl === 'string' ? staticData.pluraWebhookUrl : '';

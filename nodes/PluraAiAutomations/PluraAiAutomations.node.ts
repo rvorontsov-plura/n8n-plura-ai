@@ -30,9 +30,8 @@ async function pluraApiRequest<T>(
 	path: string,
 	opts: { qs?: Record<string, string | number | boolean | undefined>; body?: Record<string, unknown> | unknown[] | string } = {},
 ): Promise<T> {
-	const creds = await getPluraCreds(ctx);
 	const apiKey = await getApiKeyOrThrow(ctx);
-	const baseUrl = getPluraApiBaseUrl(creds);
+	const baseUrl = getPluraApiBaseUrl();
 	return requestJson<T>(ctx, {
 		method,
 		url: `${baseUrl}${path}`,
@@ -412,7 +411,7 @@ export class PluraAiAutomations implements INodeType {
 		loadOptions: {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
@@ -425,7 +424,7 @@ export class PluraAiAutomations implements INodeType {
 			async getJourneys(this: ILoadOptionsFunctions) {
 				const workspaceId = (this.getCurrentNodeParameter('workspace_id', {}) as string) || undefined;
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
@@ -437,7 +436,7 @@ export class PluraAiAutomations implements INodeType {
 
 			async getAgents(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
-				const baseUrl = getIntegrationsBaseUrl(creds);
+				const baseUrl = getIntegrationsBaseUrl();
 				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/agents`,

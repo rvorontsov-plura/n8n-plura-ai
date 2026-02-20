@@ -1,25 +1,10 @@
-import type { ICredentialTestRequest, ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class PluraAiAutomationsApi implements ICredentialType {
 	name = 'pluraAiAutomationsApi';
 	displayName = 'Plura.ai Automations API';
 	documentationUrl = 'https://docs.plura.ai/';
 	testedBy = 'pluraAiAutomationsApiTest';
-
-	test: ICredentialTestRequest = {
-		request: {
-			baseURL: 'https://plura-lb.gynetix.com/backend/api',
-			url: '/user/Authenticate.json',
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: {
-				user: '={{ $credentials.email }}',
-				password: '={{ $credentials.password }}',
-			},
-		},
-	};
 
 	properties: INodeProperties[] = [
 		{
