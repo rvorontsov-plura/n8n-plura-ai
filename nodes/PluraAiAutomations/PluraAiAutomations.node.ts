@@ -463,7 +463,7 @@ export class PluraAiAutomations implements INodeType {
 					const phone = this.getNodeParameter('lookup_phone', i) as string;
 					try {
 						const res = await pluraApiRequest<Lead>(this, 'GET', '/lead/get', { qs: { phone } });
-						returnData.push({ json: (res || {}) as IDataObject });
+						returnData.push({ json: (res || {}) as IDataObject, pairedItem: { item: i } });
 					} catch (err: unknown) {
 						const statusCode =
 							(err && typeof err === 'object' && 'httpCode' in err
@@ -473,7 +473,7 @@ export class PluraAiAutomations implements INodeType {
 								? (err as { statusCode?: number }).statusCode
 								: undefined);
 						if (Number(statusCode) === 404) {
-							returnData.push({ json: {} });
+							returnData.push({ json: {}, pairedItem: { item: i } });
 						} else {
 							throw err;
 						}
@@ -485,7 +485,7 @@ export class PluraAiAutomations implements INodeType {
 					const leadId = this.getNodeParameter('lead_id', i) as string;
 					try {
 						const res = await pluraApiRequest<Lead>(this, 'GET', '/lead/get', { qs: { lead_id: leadId } });
-						returnData.push({ json: (res || {}) as IDataObject });
+						returnData.push({ json: (res || {}) as IDataObject, pairedItem: { item: i } });
 					} catch (err: unknown) {
 						const statusCode =
 							(err && typeof err === 'object' && 'httpCode' in err
@@ -495,7 +495,7 @@ export class PluraAiAutomations implements INodeType {
 								? (err as { statusCode?: number }).statusCode
 								: undefined);
 						if (Number(statusCode) === 404) {
-							returnData.push({ json: {} });
+							returnData.push({ json: {}, pairedItem: { item: i } });
 						} else {
 							throw err;
 						}
@@ -523,7 +523,7 @@ export class PluraAiAutomations implements INodeType {
 					if (custom) Object.assign(body, custom);
 
 					const res = await pluraApiRequest<Record<string, unknown>>(this, 'PATCH', '/lead/update', { body });
-					returnData.push({ json: (res || { success: true }) as IDataObject });
+					returnData.push({ json: (res || { success: true }) as IDataObject, pairedItem: { item: i } });
 					continue;
 				}
 
@@ -533,7 +533,7 @@ export class PluraAiAutomations implements INodeType {
 					const res = await pluraApiRequest<Record<string, unknown>>(this, 'PATCH', '/lead/tag', {
 						body: { lead_id: leadId, tag },
 					});
-					returnData.push({ json: (res || { success: true }) as IDataObject });
+					returnData.push({ json: (res || { success: true }) as IDataObject, pairedItem: { item: i } });
 					continue;
 				}
 
@@ -543,7 +543,7 @@ export class PluraAiAutomations implements INodeType {
 					const res = await pluraApiRequest<Record<string, unknown>>(this, 'DELETE', '/lead/tag', {
 						qs: { lead_id: leadId, tag },
 					});
-					returnData.push({ json: (res || { success: true }) as IDataObject });
+					returnData.push({ json: (res || { success: true }) as IDataObject, pairedItem: { item: i } });
 					continue;
 				}
 
@@ -577,7 +577,7 @@ export class PluraAiAutomations implements INodeType {
 								await updateLeadById(this, existing.lead_id, record);
 							}
 							const enrolled = await enrollLeadWithId(this, workflowId, existing.lead_id);
-							returnData.push({ json: enrolled });
+							returnData.push({ json: enrolled, pairedItem: { item: i } });
 							continue;
 							}
 						} catch {
@@ -588,7 +588,7 @@ export class PluraAiAutomations implements INodeType {
 						const res = await pluraApiRequest<Record<string, unknown>>(this, 'POST', '/lead/sendtoworkflow', {
 							body: { workflow_id: workflowId, record },
 						});
-						returnData.push({ json: (res || { success: true }) as IDataObject });
+						returnData.push({ json: (res || { success: true }) as IDataObject, pairedItem: { item: i } });
 						continue;
 					} catch (err: unknown) {
 						const message = err instanceof Error ? err.message : 'sendtoworkflow failed';
@@ -598,7 +598,7 @@ export class PluraAiAutomations implements INodeType {
 							if (existing?.lead_id) {
 								await updateLeadById(this, existing.lead_id, record);
 						const enrolled = await enrollLeadWithId(this, workflowId, existing.lead_id);
-						returnData.push({ json: enrolled });
+						returnData.push({ json: enrolled, pairedItem: { item: i } });
 								continue;
 							}
 						} catch {
@@ -636,7 +636,7 @@ export class PluraAiAutomations implements INodeType {
 				if (requestData && Object.keys(requestData).length > 0) body.request_data = requestData;
 
 				const res = await pluraApiRequest<Record<string, unknown>>(this, 'POST', '/agent', { body });
-				returnData.push({ json: (res || { success: true }) as IDataObject });
+				returnData.push({ json: (res || { success: true }) as IDataObject, pairedItem: { item: i } });
 				continue;
 			}
 
