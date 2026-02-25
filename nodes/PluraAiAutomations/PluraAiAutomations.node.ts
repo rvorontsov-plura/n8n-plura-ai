@@ -18,7 +18,8 @@ import {
 	getPluraApiBaseUrl,
 	getPluraCreds,
 	parseOptionalJson,
-	requestJson,
+	requestJsonManual,
+	requestJsonWithAuthentication,
 	searchLeadViaWorkspace,
 } from '../common/PluraHelpers';
 
@@ -30,17 +31,31 @@ async function pluraApiRequest<T>(
 	path: string,
 	opts: { qs?: Record<string, string | number | boolean | undefined>; body?: Record<string, unknown> | unknown[] | string } = {},
 ): Promise<T> {
-	const apiKey = await getApiKeyOrThrow(ctx);
+	const creds = await getPluraCreds(ctx);
 	const baseUrl = getPluraApiBaseUrl();
-	return requestJson<T>(ctx, {
+	const url = `${baseUrl}${path}`;
+	const contentTypeHeaders: Record<string, string> =
+		method === 'POST' || method === 'PATCH' ? { 'Content-Type': 'application/json' } : {};
+	if (creds.apiKey) {
+		return requestJsonWithAuthentication<T>(ctx, {
+			method,
+			url,
+			qs: opts.qs,
+			body: opts.body,
+			headers: Object.keys(contentTypeHeaders).length > 0 ? contentTypeHeaders : undefined,
+		});
+	}
+	const apiKey = await getApiKeyOrThrow(ctx);
+	const manualHeaders: Record<string, string> = {
+		Authorization: `Bearer ${apiKey}`,
+		...contentTypeHeaders,
+	};
+	return requestJsonManual<T>(ctx, {
 		method,
-		url: `${baseUrl}${path}`,
+		url,
 		qs: opts.qs,
 		body: opts.body,
-		headers: {
-			Authorization: `Bearer ${apiKey}`,
-			...(method === 'POST' || method === 'PATCH' ? { 'Content-Type': 'application/json' } : {}),
-		},
+		headers: manualHeaders,
 	});
 }
 
@@ -412,7 +427,7 @@ export class PluraAiAutomations implements INodeType {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
+				const resp = await requestJsonManual<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
 					headers: { 'Content-Type': 'application/json' },
@@ -425,7 +440,7 @@ export class PluraAiAutomations implements INodeType {
 				const workspaceId = (this.getCurrentNodeParameter('workspace_id', {}) as string) || undefined;
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
+				const resp = await requestJsonManual<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
 					headers: { 'Content-Type': 'application/json' },
@@ -437,7 +452,7 @@ export class PluraAiAutomations implements INodeType {
 			async getAgents(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<{ items: Array<{ label: string; value: string }> }>(this, {
+				const resp = await requestJsonManual<{ items: Array<{ label: string; value: string }> }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/agents`,
 					headers: { 'Content-Type': 'application/json' },
@@ -453,9 +468,10 @@ export class PluraAiAutomations implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		for (let i = 0; i < items.length; i++) {
-			const resource = this.getNodeParameter('resource', i) as string;
+			try {
+				const resource = this.getNodeParameter('resource', i) as string;
 
-			if (resource === 'lead') {
+				if (resource === 'lead') {
 				const operation = this.getNodeParameter('leadOperation', i) as string;
 
 				if (operation === 'getLeadByPhone') {
@@ -639,7 +655,18 @@ export class PluraAiAutomations implements INodeType {
 				continue;
 			}
 
-			throw new NodeOperationError(this.getNode(), `Unsupported resource: ${resource}`);
+				throw new NodeOperationError(this.getNode(), `Unsupported resource: ${resource}`);
+			} catch (error) {
+				if (this.continueOnFail()) {
+					const message = error instanceof Error ? error.message : String(error);
+					returnData.push({
+						json: { error: message },
+						pairedItem: { item: i },
+					});
+					continue;
+				}
+				throw new NodeOperationError(this.getNode(), error as Error, { itemIndex: i });
+			}
 		}
 
 		return [returnData];

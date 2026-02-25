@@ -11,7 +11,7 @@ import { NodeOperationError } from 'n8n-workflow';
 import {
 	getIntegrationsBaseUrl,
 	getPluraCreds,
-	requestJson,
+	requestJsonManual,
 } from '../common/PluraHelpers';
 
 type OptionsResp = { items: Array<{ label: string; value: string }> };
@@ -82,7 +82,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<OptionsResp>(this, {
+				const resp = await requestJsonManual<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/workspaces`,
 					headers: { 'Content-Type': 'application/json' },
@@ -95,7 +95,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 				const workspaceId = this.getCurrentNodeParameter('workspace_id') as string;
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<OptionsResp>(this, {
+				const resp = await requestJsonManual<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/journeys`,
 					headers: { 'Content-Type': 'application/json' },
@@ -108,7 +108,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 				const journeyId = this.getCurrentNodeParameter('journey_id') as string;
 				const creds = await getPluraCreds(this);
 				const baseUrl = getIntegrationsBaseUrl();
-				const resp = await requestJson<OptionsResp>(this, {
+				const resp = await requestJsonManual<OptionsResp>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/options/nodes`,
 					headers: { 'Content-Type': 'application/json' },
@@ -122,7 +122,21 @@ export class PluraAiAutomationsTrigger implements INodeType {
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
-				return false;
+				const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
+				const storedHookId = staticData.pluraHookId;
+				const storedWebhookUrl = staticData.pluraWebhookUrl;
+				const webhookUrl = this.getNodeWebhookUrl('default');
+				if (!webhookUrl || (!storedHookId && !storedWebhookUrl)) {
+					return false;
+				}
+				if (storedWebhookUrl !== webhookUrl) {
+					return false;
+				}
+				const journeyId = this.getNodeParameter('journey_id') as string;
+				const automationNodeId = this.getNodeParameter('automation_node_id') as string;
+				const storedJourneyId = staticData.pluraJourneyId;
+				const storedAutomationNodeId = staticData.pluraAutomationNodeId;
+				return storedJourneyId === journeyId && storedAutomationNodeId === automationNodeId;
 			},
 
 			async create(this: IHookFunctions) {
@@ -135,7 +149,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					throw new NodeOperationError(this.getNode(), 'Failed to determine webhook URL');
 				}
 
-				const resp = await requestJson<{ hook_id?: string }>(this, {
+				const resp = await requestJsonManual<{ hook_id?: string }>(this, {
 					method: 'POST',
 					url: `${baseUrl}/make-com/automation/subscribe`,
 					headers: { 'Content-Type': 'application/json' },
@@ -147,9 +161,11 @@ export class PluraAiAutomationsTrigger implements INodeType {
 					},
 				});
 
-				const staticData = this.getWorkflowStaticData('node');
+				const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
 				staticData.pluraWebhookUrl = webhookUrl;
 				staticData.pluraHookId = resp?.hook_id;
+				staticData.pluraJourneyId = journeyId;
+				staticData.pluraAutomationNodeId = automationNodeId;
 
 				return true;
 			},
@@ -163,7 +179,7 @@ export class PluraAiAutomationsTrigger implements INodeType {
 				const webhookUrl = storedWebhookUrl || this.getNodeWebhookUrl('default');
 				if (!webhookUrl) return true;
 
-				await requestJson(this, {
+				await requestJsonManual(this, {
 					method: 'DELETE',
 					url: `${baseUrl}/make-com/automation/unsubscribe`,
 					headers: { 'Content-Type': 'application/json' },

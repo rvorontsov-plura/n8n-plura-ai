@@ -31,7 +31,7 @@ export function getPluraApiBaseUrl(): string {
 	return 'https://api.plura.ai/v1';
 }
 
-export async function requestJson<T = unknown>(
+async function httpRequestJson<T = unknown>(
 	ctx: N8nCtx,
 	options: {
 		method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -40,22 +40,26 @@ export async function requestJson<T = unknown>(
 		body?: unknown;
 		headers?: Record<string, string>;
 	},
+	useAuthentication: boolean,
 ): Promise<T> {
+	const requestOptions = {
+		method: options.method,
+		url: options.url,
+		qs: options.qs,
+		body: options.body as
+			| string
+			| Buffer
+			| Record<string, unknown>
+			| unknown[]
+			| URLSearchParams
+			| undefined,
+		headers: options.headers,
+		json: true,
+	};
 	try {
-		const resp = await ctx.helpers.httpRequest({
-			method: options.method,
-			url: options.url,
-			qs: options.qs,
-			body: options.body as
-				| string
-				| Buffer
-				| Record<string, unknown>
-				| unknown[]
-				| URLSearchParams
-				| undefined,
-			headers: options.headers,
-			json: true,
-		});
+		const resp = useAuthentication
+			? await ctx.helpers.httpRequestWithAuthentication.call(ctx, 'pluraAiAutomationsApi', requestOptions)
+			: await ctx.helpers.httpRequest(requestOptions);
 		return resp as T;
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
@@ -67,6 +71,45 @@ export async function requestJson<T = unknown>(
 	}
 }
 
+export async function requestJson<T = unknown>(
+	ctx: N8nCtx,
+	options: {
+		method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+		url: string;
+		qs?: Record<string, string | number | boolean | undefined>;
+		body?: unknown;
+		headers?: Record<string, string>;
+	},
+): Promise<T> {
+	return httpRequestJson(ctx, options, true);
+}
+
+export async function requestJsonManual<T = unknown>(
+	ctx: N8nCtx,
+	options: {
+		method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+		url: string;
+		qs?: Record<string, string | number | boolean | undefined>;
+		body?: unknown;
+		headers?: Record<string, string>;
+	},
+): Promise<T> {
+	return httpRequestJson(ctx, options, false);
+}
+
+export async function requestJsonWithAuthentication<T = unknown>(
+	ctx: N8nCtx,
+	options: {
+		method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+		url: string;
+		qs?: Record<string, string | number | boolean | undefined>;
+		body?: unknown;
+		headers?: Record<string, string>;
+	},
+): Promise<T> {
+	return httpRequestJson(ctx, options, true);
+}
+
 export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 	const creds = await getPluraCreds(ctx);
 
@@ -74,7 +117,7 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 
 	let jwt: string | undefined;
 	if (creds.email && creds.password) {
-		const auth = await requestJson<{ status?: string; token?: string }>(ctx, {
+		const auth = await requestJsonManual<{ status?: string; token?: string }>(ctx, {
 			method: 'POST',
 			url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
 			headers: { 'Content-Type': 'application/json' },
@@ -90,7 +133,7 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 		throw new NodeOperationError(ctx.getNode(), 'Missing credentials. Provide an API Key, or Email + Password.');
 	}
 
-	const workspaces = await requestJson<Array<{ workspace_id: string }>>(ctx, {
+	const workspaces = await requestJsonManual<Array<{ workspace_id: string }>>(ctx, {
 		method: 'GET',
 		url: 'https://plura-lb.gynetix.com/backend/api/user/Workspaces.json',
 		headers: { accept: '*/*', Authorization: `Bearer ${jwt}` },
@@ -101,7 +144,7 @@ export async function getApiKeyOrThrow(ctx: N8nCtx): Promise<string> {
 		throw new NodeOperationError(ctx.getNode(), 'No workspaces available for this account');
 	}
 
-	const apiKeyResp = await requestJson<{ items?: Array<{ api_key?: string }> }>(ctx, {
+	const apiKeyResp = await requestJsonManual<{ items?: Array<{ api_key?: string }> }>(ctx, {
 		method: 'GET',
 		url: 'https://plura-lb.gynetix.com/backend/api/user/ApiKey.json',
 		qs: { workspace_id: workspaceId, limit: 30, page: 1 },
@@ -123,7 +166,7 @@ export async function getBearerTokenOrThrow(ctx: N8nCtx): Promise<string> {
 		throw new NodeOperationError(ctx.getNode(), 'Missing credentials. Provide Email + Password.');
 	}
 
-	const auth = await requestJson<{ status?: string; token?: string }>(ctx, {
+	const auth = await requestJsonManual<{ status?: string; token?: string }>(ctx, {
 		method: 'POST',
 		url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
 		headers: { 'Content-Type': 'application/json' },
@@ -204,7 +247,7 @@ function leadsMatch(
 
 export async function getFirstWorkspaceId(ctx: N8nCtx, jwt: string): Promise<string | null> {
 	try {
-		const workspaces = await requestJson<Array<{ workspace_id: string }>>(ctx, {
+		const workspaces = await requestJsonManual<Array<{ workspace_id: string }>>(ctx, {
 			method: 'GET',
 			url: 'https://plura-lb.gynetix.com/backend/api/user/Workspaces.json',
 			headers: { accept: '*/*', Authorization: `Bearer ${jwt}` },
@@ -246,7 +289,7 @@ export async function searchLeadViaWorkspace(
 
 	const fetchWorkspaceLeads = async (params: Record<string, unknown> = {}): Promise<Array<Record<string, unknown>>> => {
 		try {
-			const resp = await requestJson<{ status?: string; items?: Array<Record<string, unknown>> }>(ctx, {
+			const resp = await requestJsonManual<{ status?: string; items?: Array<Record<string, unknown>> }>(ctx, {
 				method: 'GET',
 				url: 'https://plura-lb.gynetix.com/backend/api/user/WorkspaceInboxSearch.json',
 				qs: {
