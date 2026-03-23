@@ -1,10 +1,7 @@
 import type {
-	ICredentialTestFunctions,
-	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
-	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -12,7 +9,6 @@ import type {
 import { NodeOperationError } from 'n8n-workflow';
 
 import {
-	getApiKeyOrThrow,
 	getIntegrationsBaseUrl,
 	getPhoneVariants,
 	getPluraApiBaseUrl,
@@ -31,31 +27,16 @@ async function pluraApiRequest<T>(
 	path: string,
 	opts: { qs?: Record<string, string | number | boolean | undefined>; body?: Record<string, unknown> | unknown[] | string } = {},
 ): Promise<T> {
-	const creds = await getPluraCreds(ctx);
 	const baseUrl = getPluraApiBaseUrl();
 	const url = `${baseUrl}${path}`;
 	const contentTypeHeaders: Record<string, string> =
 		method === 'POST' || method === 'PATCH' ? { 'Content-Type': 'application/json' } : {};
-	if (creds.apiKey) {
-		return requestJsonWithAuthentication<T>(ctx, {
-			method,
-			url,
-			qs: opts.qs,
-			body: opts.body,
-			headers: Object.keys(contentTypeHeaders).length > 0 ? contentTypeHeaders : undefined,
-		});
-	}
-	const apiKey = await getApiKeyOrThrow(ctx);
-	const manualHeaders: Record<string, string> = {
-		Authorization: `Bearer ${apiKey}`,
-		...contentTypeHeaders,
-	};
-	return requestJsonManual<T>(ctx, {
+	return requestJsonWithAuthentication<T>(ctx, {
 		method,
 		url,
 		qs: opts.qs,
 		body: opts.body,
-		headers: manualHeaders,
+		headers: Object.keys(contentTypeHeaders).length > 0 ? contentTypeHeaders : undefined,
 	});
 }
 
@@ -326,103 +307,6 @@ export class PluraAiAutomations implements INodeType {
 	};
 
 	methods = {
-		credentialTest: {
-			async pluraAiAutomationsApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const { email, password, apiKey } = credential.data as {
-					email?: string;
-					password?: string;
-					apiKey?: string;
-				};
-
-				// If API key is provided, test with API key
-				if (apiKey && apiKey.trim()) {
-					try {
-						// ICredentialTestFunctions doesn't have httpRequest in types, but it exists at runtime
-						const helpers = this.helpers as unknown as {
-							httpRequest: (options: {
-								method: string;
-								url: string;
-								headers?: Record<string, string>;
-								json?: boolean;
-							}) => Promise<unknown>;
-						};
-						// Test API key by making a simple API call
-						await helpers.httpRequest({
-							method: 'GET',
-							url: 'https://api.plura.ai/v1/lead/get',
-							headers: {
-								Authorization: `Bearer ${apiKey.trim()}`,
-							},
-							json: true,
-						});
-						return {
-							status: 'OK',
-							message: 'Connection successful!',
-						};
-					} catch (error: unknown) {
-						const message = error instanceof Error ? error.message : 'Connection failed';
-						return {
-							status: 'Error',
-							message: `API Key authentication failed: ${message}`,
-						};
-					}
-				}
-
-				// Otherwise, test with email/password
-				if (!email || !password) {
-					return {
-						status: 'Error',
-						message: 'Either API Key or Email and Password are required',
-					};
-				}
-
-				try {
-					// ICredentialTestFunctions doesn't have httpRequest in types, but it exists at runtime
-					const helpers = this.helpers as unknown as {
-						httpRequest: (options: {
-							method: string;
-							url: string;
-							headers?: Record<string, string>;
-							body?: string;
-							json?: boolean;
-						}) => Promise<{ status?: string; token?: string; message?: string }>;
-					};
-					const response = await helpers.httpRequest({
-						method: 'POST',
-						url: 'https://plura-lb.gynetix.com/backend/api/user/Authenticate.json',
-						headers: {
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify({
-							user: email,
-							password: password,
-						}),
-						json: true,
-					});
-
-					if (response && response.status === 'success' && response.token) {
-						return {
-							status: 'OK',
-							message: 'Connection successful!',
-						};
-					}
-
-					return {
-						status: 'Error',
-						message: response?.message || 'Authentication failed. Please check your email and password.',
-					};
-				} catch (error: unknown) {
-					const message = error instanceof Error ? error.message : 'Connection failed';
-					return {
-						status: 'Error',
-						message: `Authentication failed: ${message}`,
-					};
-				}
-			},
-		},
 		loadOptions: {
 			async getWorkspaces(this: ILoadOptionsFunctions) {
 				const creds = await getPluraCreds(this);
